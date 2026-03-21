@@ -1,182 +1,211 @@
-![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
-![Arduino](https://img.shields.io/badge/Platform-Arduino-blue?style=for-the-badge&logo=arduino&logoColor=white)
 
-# 📡 Projeto Arduino Ethernet – Comunicação em Rede Local
+<h1>📡 Projeto Arduino Ethernet – Controle de LEDs via Rede Local</h1>
 
-## 📖 Descrição
+<h2>📖 Descrição</h2>
+<p>Este projeto demonstra como controlar LEDs conectados a um Arduino com módulo Ethernet usando uma <strong>página web</strong>.</p>
+<p>O Arduino cria um servidor HTTP na porta 80, permitindo que qualquer dispositivo na mesma rede local acesse a página e controle os LEDs com botões “ON” e “OFF”.</p>
+<p>Além disso, o <strong>estado atual de cada LED</strong> é mostrado em tempo real na página:</p>
+<ul>
+<li>LED ligado → botão verde</li>
+<li>LED desligado → botão vermelho</li>
+</ul>
+<p>A comunicação é feita via <code>fetch()</code> no JavaScript.</p>
 
-Este projeto demonstra a comunicação entre um Arduino com módulo Ethernet e dispositivos em uma rede local.
+<h2>🎯 Objetivos</h2>
+<ul>
+<li>Conectar o Arduino à rede via cabo Ethernet</li>
+<li>Criar um servidor HTTP no Arduino</li>
+<li>Controlar LEDs em tempo real via navegador</li>
+<li>Visualizar o estado atual dos LEDs</li>
+<li>Aprender conceitos básicos de IoT local</li>
+</ul>
 
-O Arduino é configurado para obter um endereço IP automaticamente (DHCP) e disponibilizar um servidor HTTP básico na porta 80.
+<h2>🛠️ Materiais Utilizados</h2>
+<ul>
+<li>Arduino (UNO, Mega, etc.)</li>
+<li>Módulo Ethernet (W5100 ou W5500)</li>
+<li>Cabo RJ45</li>
+<li>LED x2</li>
+<li>Resistores 220Ω ou 330Ω</li>
+<li>Jumpers e protoboard</li>
+<li>Roteador / Switch</li>
+<li>Computador ou celular na mesma rede</li>
+</ul>
 
----
+<h2>🔌 1. Conexão do Hardware</h2>
+<ul>
+<li>Conecte o módulo Ethernet ao Arduino (pinos SPI: 10, 11, 12, 13)</li>
+<li>Conecte o cabo RJ45 ao roteador</li>
+<li>Conecte os LEDs com resistores nos pinos:</li>
+</ul>
 
-## 🎯 Objetivos
+<table>
+<tr><th>LED</th><th>Pino Arduino</th></tr>
+<tr><td>LED1</td><td>8</td></tr>
+<tr><td>LED2</td><td>6</td></tr>
+</table>
 
-- Conectar o Arduino à rede via cabo Ethernet  
-- Obter um endereço IP automaticamente (DHCP)  
-- Permitir comunicação com dispositivos da mesma rede  
-- Validar conexão via monitor serial ou navegador  
+<p>Certifique-se de conectar o GND do Arduino ao GND dos LEDs</p>
 
----
+<h2>🌐 2. Configuração de Rede</h2>
+<ul>
+<li>Acesse o roteador e verifique a faixa de IP disponível</li>
+<li>O Arduino obtém IP automaticamente via DHCP</li>
+<li>(Opcional) Faça reserva de IP pelo MAC do Arduino</li>
+<li>Salve as configurações</li>
+</ul>
 
-## 🛠️ Materiais Utilizados
+<h2>💻 3. Código do Arduino</h2>
+<pre><code>#include &lt;SPI.h&gt;
+#include &lt;Ethernet.h&gt;
 
-- Arduino  
-- Módulo Ethernet (W5100 ou W5500)  
-- Cabo de rede (RJ45)  
-- Roteador  
-- Computador para programação  
-- Celular ou outro dispositivo na mesma rede  
+#define led 8
+#define led2 6
 
----
+byte mac[6] = { 0x90, 0xA2, 0xDA, 0xF5, 0xB1, 0xE9 };
+EthernetServer server(80);
 
-## 🔌 1. Conexão do Hardware
+bool ledState = false;
+bool led2State = false;
 
-- Conecte o módulo Ethernet ao Arduino  
-- Conecte o cabo RJ45 do módulo ao roteador  
-- Verifique se os LEDs da porta Ethernet estão acesos  
+const char page[] PROGMEM = R"HTML(
+&lt;!DOCTYPE html&gt;
+&lt;html lang=&quot;pt-BR&quot;&gt;
+&lt;head&gt;
+&lt;meta charset=&quot;UTF-8&quot;&gt;
+&lt;meta name=&quot;viewport&quot; content=&quot;width=device-width, initial-scale=1.0&quot;&gt;
+&lt;title&gt;Controle de LEDs&lt;/title&gt;
+&lt;style&gt;
+body { font-family: sans-serif; text-align: center; }
+button { transition: .3s; padding: 10px 20px; font-weight: bold; margin: 5px; border-radius: 4px; border: none; color: white; cursor: pointer; }
+.on { background-color: rgb(116,187,9); }
+.off { background-color: rgb(190,23,23); }
+&lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+&lt;h1&gt;Controle de LEDs&lt;/h1&gt;
 
-**Pinos utilizados:** 4, 10, 11, 12 e 13  
+&lt;p&gt;LED1&lt;/p&gt;
+&lt;button id=&quot;led1-btn&quot; onclick=&quot;toggle('led1')&quot;&gt;ON&lt;/button&gt;
 
----
+&lt;p&gt;LED2&lt;/p&gt;
+&lt;button id=&quot;led2-btn&quot; onclick=&quot;toggle('led2')&quot;&gt;ON&lt;/button&gt;
 
-## 🌐 2. Configuração de Rede
+&lt;script&gt;
+async function toggle(led) {
+    await fetch(&quot;/toggle-&quot; + led);
+    await updateState();
+}
 
-1. Acesse o roteador (ex: 192.168.0.1)  
-2. Vá até DHCP / Reserva de IP  
-3. Identifique o Arduino pelo MAC  
-4. (Opcional) Reserve um IP fixo  
-5. Salve as configurações  
+async function updateState() {
+    const res = await fetch(&quot;/status&quot;);
+    const data = await res.json();
 
----
+    document.getElementById(&quot;led1-btn&quot;).textContent = data.led1 ? &quot;ON&quot; : &quot;OFF&quot;;
+    document.getElementById(&quot;led1-btn&quot;).className = data.led1 ? &quot;on&quot; : &quot;off&quot;;
 
-## 💻 3. Código do Arduino
+    document.getElementById(&quot;led2-btn&quot;).textContent = data.led2 ? &quot;ON&quot; : &quot;OFF&quot;;
+    document.getElementById(&quot;led2-btn&quot;).className = data.led2 ? &quot;on&quot; : &quot;off&quot;;
+}
 
-```cpp
-/**
- Arduino Ethernet
- @author Gabriel A., Felippe C., e Reginaldo S.
-*/
-
-// OBS: Pinos utilizados são os 4, 10, 11, 12 e 13.
-
-#include <SPI.h>
-#include <Ethernet.h>
-
-byte mac[6] = { 0x90, 0xA2, 0xDA, 0x57, 0xB0, 0x2D };
-
-EthernetServer server(80); // Porta HTTP
+updateState();
+setInterval(updateState, 2000);
+&lt;/script&gt;
+&lt;/body&gt;
+&lt;/html&gt;
+)HTML";
 
 void setup() {
+  pinMode(led, OUTPUT);
+  pinMode(led2, OUTPUT);
+
   Serial.begin(9600);
-
-  // Inicializa com DHCP
   Ethernet.begin(mac);
-
   server.begin();
 
-  Serial.println("Arduino Ethernet Shield");
-
-  Serial.print("IP: ");
+  Serial.println(&quot;Servidor Arduino Ethernet iniciado!&quot;);
+  Serial.print(&quot;IP do Arduino: &quot;);
   Serial.println(Ethernet.localIP());
-
-  Serial.print("Máscara de sub-rede: ");
-  Serial.println(Ethernet.subnetMask());
-
-  Serial.print("Gateway: ");
-  Serial.println(Ethernet.gatewayIP());
-
-  Serial.print("DNS: ");
-  Serial.println(Ethernet.dnsServerIP());
 }
 
 void loop() {
+  EthernetClient client = server.available();
+  if (client) {
+    String request = &quot;&quot;;
+    while (client.connected() &amp;&amp; client.available()) {
+      char c = client.read();
+      request += c;
+    }
+
+    if (request.indexOf(&quot;/toggle-led1&quot;) &gt; 0) {
+      ledState = !ledState;
+      digitalWrite(led, ledState ? HIGH : LOW);
+    }
+    else if (request.indexOf(&quot;/toggle-led2&quot;) &gt; 0) {
+      led2State = !led2State;
+      digitalWrite(led2, led2State ? HIGH : LOW);
+    }
+    else if (request.indexOf(&quot;/status&quot;) &gt; 0) {
+      client.println(&quot;HTTP/1.1 200 OK&quot;);
+      client.println(&quot;Content-Type: application/json&quot;);
+      client.println(&quot;Connection: close&quot;);
+      client.println();
+      client.print(&quot;{&quot;);
+      client.print(&quot;\&quot;led1\&quot;:&quot;);
+      client.print(ledState ? &quot;true&quot; : &quot;false&quot;);
+      client.print(&quot;,&quot;);
+      client.print(&quot;\&quot;led2\&quot;:&quot;);
+      client.print(led2State ? &quot;true&quot; : &quot;false&quot;);
+      client.println(&quot;}&quot;);
+      client.stop();
+      return;
+    }
+    else {
+      client.println(&quot;HTTP/1.1 200 OK&quot;);
+      client.println(&quot;Content-Type: text/html&quot;);
+      client.println(&quot;Connection: close&quot;);
+      client.println();
+      client.print((__FlashStringHelper*)page);
+    }
+
+    delay(1);
+    client.stop();
+  }
 }
-```
+</code></pre>
 
----
+<h2>📱 4. Acessando o Servidor Web</h2>
+<ul>
+<li>Conecte seu computador ou celular à mesma rede que o Arduino</li>
+<li>Abra o navegador e acesse: <code>http://IP_DO_ARDUINO</code></li>
+<li>Exemplo: <code>http://192.168.0.100</code></li>
+<li>Clique nos botões “ON” e “OFF” para controlar os LEDs</li>
+<li>Os botões mudam de cor conforme o estado real do LED</li>
+</ul>
 
-## 📱 4. Conectar o Dispositivo
+<h2>✅ Resultados Esperados</h2>
+<ul>
+<li>LED1 e LED2 respondem aos cliques na página web</li>
+<li>Estado dos LEDs é mostrado em tempo real</li>
+<li>LEDs permanecem no estado selecionado</li>
+<li>Comunicação confiável via rede local</li>
+</ul>
 
-- Conecte o celular ou computador ao mesmo Wi-Fi do roteador  
-- Certifique-se de que está na mesma faixa de IP  
+<h2>⚡ Possíveis Melhorias</h2>
+<ul>
+<li>Adicionar mais LEDs ou sensores</li>
+<li>Criar painel de controle completo estilo mini-dashboard IoT</li>
+<li>Criar API REST para controle remoto por apps externos</li>
+<li>Otimizar atualização do estado sem polling constante</li>
+</ul>
 
----
+<h2>🧪 Troubleshooting</h2>
+<ul>
+<li>Certifique-se de que os LEDs estão nos pinos corretos e com GND conectado</li>
+<li>Verifique cabos RJ45 e alimentação do Arduino</li>
+<li>Confira se o Arduino recebeu um IP válido via DHCP</li>
+<li>Reinicie Arduino ou roteador se necessário</li>
+</ul>
 
-## 📡 5. Teste de Comunicação
-
-### ✔️ Via Monitor Serial
-
-Após enviar o código:
-
-- Abra o Monitor Serial (9600 baud)  
-- Verifique o IP atribuído ao Arduino  
-
----
-
-### ✔️ Via Navegador
-
-No celular ou computador, acesse:
-
-```
-http://IP_DO_ARDUINO
-```
-
-Exemplo:
-
-```
-http://192.168.0.100
-```
-
----
-
-### ✔️ Ping (opcional)
-
-Use apps como PingTools:
-
-```
-ping 192.168.X.X
-```
-
-**Observação:** nem todo Arduino responde a ping.
-
----
-
-## ⚠️ Observações Importantes
-
-- O Arduino está configurado via DHCP  
-- O IP pode mudar se não houver reserva no roteador  
-- Certifique-se de usar um MAC válido e único  
-- O servidor HTTP está ativo na porta 80  
-
----
-
-## 🧪 6. Troubleshooting
-
-Se não funcionar:
-
-- Verifique cabos e conexões  
-- Confira se os LEDs da Ethernet estão acesos  
-- Veja o IP no Monitor Serial  
-- Reinicie Arduino e roteador  
-- Verifique firewall da rede  
-- Confirme que os dispositivos estão na mesma rede  
-
----
-
-## ✅ Resultados Esperados
-
-- Arduino conectado à rede com IP válido  
-- Informações de rede exibidas no Serial Monitor  
-- Acesso ao IP do Arduino via navegador  
-- Comunicação estabelecida na rede local  
-
----
-
-## 🚀 Possíveis Melhorias
-
-- Criar página web no Arduino  
-- Controlar LEDs via navegador  
-- Ler sensores e enviar dados pela rede  
-- Criar API simples (REST)  
+</body>
+</html>
